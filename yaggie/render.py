@@ -6,6 +6,7 @@ import pyqtgraph.opengl as gl
 from PyQt5.QtGui import QVector3D
 from pyqtgraph.Qt import QtCore, QtGui
 
+
 def index2position(image, metadata):
     indice = np.array(np.where(image > 0))
     ratio = np.array([[metadata['pixel_size_x'],
@@ -14,15 +15,17 @@ def index2position(image, metadata):
     positions = indice * ratio[:len(indice)]
     return positions.T
 
+
 def generate_random_colors(number, alpha=0.005):
     color_list = []
-    for i in range(number): 
+    for i in range(number):
         r, g, b = np.random.random(), np.random.random(), np.random.random()
         r /= sum([r, g, b])
         g /= sum([r, g, b])
         b /= sum([r, g, b])
         color_list.append((r, g, b, alpha))
     return color_list
+
 
 def generate_color_palette(number, alpha=0.01):
     red = (204./255, 0./255, 0./255, alpha)
@@ -32,24 +35,26 @@ def generate_color_palette(number, alpha=0.01):
     purple = (204./255, 0./255, 204./255, alpha)
     return [red, blue, green, yellow, purple][number % 5]
 
-def get_label_color(labels):
+
+def get_label_color(labels, alpha=0.01):
     for label in labels.flatten():
         if label > 0:
-            yield generate_color_palette(int(label))
+            yield generate_color_palette(int(label), alpha)
+
 
 def render_image(image, metadata, feature=None):
     pg.mkQApp()
     view = gl.GLViewWidget()
     view.show()
     image_positions = index2position(image, metadata)
-    view.opts['center'] = QVector3D(image_positions.T[0].flatten().max() / 2, 
-                                    image_positions.T[1].flatten().max() / 2, 
+    view.opts['center'] = QVector3D(image_positions.T[0].flatten().max() / 2,
+                                    image_positions.T[1].flatten().max() / 2,
                                     image_positions.T[2].flatten().max() / 2)  # rotation centre of the camera
     view.opts['distance'] = image_positions.flatten().max() * 2  # distance of the camera respect to the center
-    image_color = np.zeros([len(image_positions), 4]) + np.array([0.1, 0.1, 1, 0.01]) 
+    image_color = np.zeros([len(image_positions), 4]) + np.array([0.1, 0.1, 1, 0.01])
     point_image = gl.GLScatterPlotItem(pos=image_positions, color=image_color, pxMode=False)
     view.addItem(point_image)
-    if type(feature) != type(None):
+    if isinstance(feature, type(None)):
         feature = feature.T
         feature = np.array([feature[0] * metadata['pixel_size_x'],
                             feature[1] * metadata['pixel_size_y'],
@@ -61,7 +66,8 @@ def render_image(image, metadata, feature=None):
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
 
-def render_labels(labels, metadata):
+
+def render_labels(labels, metadata, alpha=0.01):
     """
     labels.shape: (x_size, y_size, z_size)
     """
@@ -69,24 +75,27 @@ def render_labels(labels, metadata):
     view = gl.GLViewWidget()
     view.show()
     label_positions = index2position(labels, metadata)
-    view.opts['center'] = QVector3D(label_positions.T[0].flatten().max() / 2, 
-                                    label_positions.T[1].flatten().max() / 2, 
+    view.opts['center'] = QVector3D(label_positions.T[0].flatten().max() / 2,
+                                    label_positions.T[1].flatten().max() / 2,
                                     label_positions.T[2].flatten().max() / 2)  # rotation centre of the camera
     view.opts['distance'] = label_positions.flatten().max() * 2  # distance of the camera respect to the center
-    label_color = np.array(list(get_label_color(labels)))
+    label_color = np.array(list(get_label_color(labels, alpha)))
     point_label = gl.GLScatterPlotItem(pos=label_positions, color=label_color, pxMode=False)
     view.addItem(point_label)
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
+
 
 def refresh_scatter(plot, feature, upper, lower, **kargs):
     plot.clear()
     scatter = [(p[0], p[1]) for p in feature.T if (p[2] < upper and p[2] > lower)]
     plot.setData(pos=scatter, **kargs)
 
+
 def refresh_image(canvas, new_image, z):
     canvas.clear()
     canvas.setImage(new_image[z])
+
 
 def annotate_maxima(image, feature):
     image = np.moveaxis(image, -1, 0)  # x,y,z ---> z,x,y
@@ -118,7 +127,7 @@ def annotate_maxima(image, feature):
         lower, upper = region.getRegion()
         lower = int(lower)
         upper = int(upper)
-        refresh_scatter(axis, feature, upper, lower, 
+        refresh_scatter(axis, feature, upper, lower,
                         size=10, brush=pg.mkBrush(color=(255, 0, 0, 255)))
 
     refresh_scatter(axis, feature, 0, 1, size=10, brush=pg.mkBrush(color=(255, 0, 0, 255)))
@@ -134,6 +143,7 @@ def annotate_maxima(image, feature):
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
 
+
 def refresh_labels(plot, labels, z, canvas, image):
     plot.clear()
     plot.addItem(canvas)
@@ -143,7 +153,7 @@ def refresh_labels(plot, labels, z, canvas, image):
     xys = [[], []]  # todo: this is stupid
     coms = []
     values = []
-    for i in set(projection[projection>0].ravel()):
+    for i in set(projection[projection > 0].ravel()):
         xy = np.array(np.where(projection == i))
         length = xy.shape[1]
         if xy is not []:
@@ -153,8 +163,8 @@ def refresh_labels(plot, labels, z, canvas, image):
             xys[1] += list(xy[1])
             color = generate_color_palette(int(i), alpha=0.5)
             color = np.array(color) * 255
-            brush=pg.mkBrush(color=color)
-            pen=pg.mkPen(color=color)
+            brush = pg.mkBrush(color=color)
+            pen = pg.mkPen(color=color)
             pens += [pen] * length  # for i in range(length)]
             brushs += [brush] * length  # for i in range(length)]
     xys = np.array(xys)
@@ -168,6 +178,7 @@ def refresh_labels(plot, labels, z, canvas, image):
         text = pg.TextItem(html=html)
         text.setPos(x, y)
         plot.addItem(text)
+
 
 def annotate_labels(image, labels):
     image = np.moveaxis(image, -1, 0)  # x,y,z ---> z,x,y
@@ -199,6 +210,7 @@ def annotate_labels(image, labels):
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
 
+
 def label_scatter(positions, labels):
     pg.mkQApp()
     view = gl.GLViewWidget()
@@ -209,7 +221,8 @@ def label_scatter(positions, labels):
     view.addItem(point_label)
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
-    
+
+
 def render_convex_hull(convex_hull, metadata=None, index=0):
     """
     labels.shape: (x_size, y_size, z_size)
@@ -219,8 +232,8 @@ def render_convex_hull(convex_hull, metadata=None, index=0):
     view.show()
     cvh_positions = convex_hull.points
     cvh_facets_indice = convex_hull.simplices
-    view.opts['center'] = QVector3D(cvh_positions.T[0].flatten().max() / 2, 
-                                    cvh_positions.T[1].flatten().max() / 2, 
+    view.opts['center'] = QVector3D(cvh_positions.T[0].flatten().max() / 2,
+                                    cvh_positions.T[1].flatten().max() / 2,
                                     cvh_positions.T[2].flatten().max() / 2)  # rotation centre of the camera
     view.opts['distance'] = cvh_positions.flatten().max() * 2  # distance of the camera respect to the center
     color = generate_color_palette(index)
