@@ -5,13 +5,14 @@ import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 from PyQt5.QtGui import QVector3D
 from pyqtgraph.Qt import QtCore, QtGui
+from matplotlib import cm
 
 
 def index2position(image, metadata):
     indice = np.array(np.where(image > 0))
     ratio = np.array([[metadata['pixel_size_x'],
-                      metadata['pixel_size_y'],
-                      metadata['pixel_size_z']]]).T
+                       metadata['pixel_size_y'],
+                       metadata['pixel_size_z']]]).T
     positions = indice * ratio[:len(indice)]
     return positions.T
 
@@ -28,11 +29,11 @@ def generate_random_colors(number, alpha=0.005):
 
 
 def generate_color_palette(number, alpha=0.01):
-    red = (204./255, 0./255, 0./255, alpha)
-    yellow = (204./255, 102./255, 0./255, alpha)
-    green = (0./255, 204./255, 0./255, alpha)
-    blue = (0./255, 0./255, 204./255, alpha)
-    purple = (204./255, 0./255, 204./255, alpha)
+    red = (204. / 255, 0. / 255, 0. / 255, alpha)
+    yellow = (204. / 255, 102. / 255, 0. / 255, alpha)
+    green = (0. / 255, 204. / 255, 0. / 255, alpha)
+    blue = (0. / 255, 0. / 255, 204. / 255, alpha)
+    purple = (204. / 255, 0. / 255, 204. / 255, alpha)
     return [red, blue, green, yellow, purple][number % 5]
 
 
@@ -121,7 +122,7 @@ def annotate_maxima(image, feature):
         refresh_image(canvas, image, z)
         lower, upper = region.getRegion()
         rw = upper - lower  # region_width
-        region.setRegion([z-rw/2, z+rw/2])
+        region.setRegion([z - rw / 2, z + rw / 2])
 
     def region_update():
         lower, upper = region.getRegion()
@@ -144,36 +145,32 @@ def annotate_maxima(image, feature):
         QtGui.QApplication.instance().exec_()
 
 
-def refresh_labels(plot, labels, z, canvas, image):
-    plot.clear()
-    plot.addItem(canvas)
-    projection = labels[z]
-    pens = []
-    brushs = []
-    xys = [[], []]  # todo: this is stupid
+def refresh_labels(plot, canvas, labels, z, show_com=False):
+    """
+    :param plot: a pyqtgraph.PlotItem instance
+    :param canvas: a ImageItem instance, belonging to `plot`
+    :param labels:  3D numpy array
+    :param z:  the z stack value to show
+    :param show_com: if show com on the plot, not recommonded
+    :return:
+    """
+    canvas.clear()
     coms = []
     values = []
+    canvas.setImage(label_to_2d_image(labels, z=z, alpha=0.5))
+    if not show_com:
+        return
+    # get com of all labels
+    projection = labels[z]
     for i in set(projection[projection > 0].ravel()):
-        xy = np.array(np.where(projection == i))
-        length = xy.shape[1]
-        if xy is not []:
+        xy = np.where(projection == i)
+        if xy:
             coms.append(np.average(xy, axis=1))
             values.append(str(i))
-            xys[0] += list(xy[0])
-            xys[1] += list(xy[1])
-            color = generate_color_palette(int(i), alpha=0.5)
-            color = np.array(color) * 255
-            brush = pg.mkBrush(color=color)
-            pen = pg.mkPen(color=color)
-            pens += [pen] * length  # for i in range(length)]
-            brushs += [brush] * length  # for i in range(length)]
-    xys = np.array(xys)
-    coms = np.array(coms)
-    scatters = pg.ScatterPlotItem()
-    scatters.setData(pos=xys.T, brush=brushs, pen=pens)
-    plot.addItem(scatters)
-    for value, position in zip(values, coms):
-        x, y = position
+    for item in plot.items:  # remove previous label value
+        if type(item) == pg.TextItem:
+            plot.removeItem(item)
+    for value, (x, y) in zip(values, coms):
         html = '<font size="12" color="white">%s</font>' % value
         text = pg.TextItem(html=html)
         text.setPos(x, y)
@@ -183,32 +180,60 @@ def refresh_labels(plot, labels, z, canvas, image):
 def annotate_labels(image, labels):
     image = np.moveaxis(image, -1, 0)  # x,y,z ---> z,x,y
     labels = np.moveaxis(labels, -1, 0)  # x,y,z ---> z,x,y
+    # create canvas
     pg.mkQApp()
     window = pg.GraphicsLayoutWidget()
     p1 = window.addPlot(row=1, col=0, rowspan=3)
     p1.setPreferredHeight(1)
     p2 = window.addPlot(row=4, col=0, rowspane=1)
     p2.setXRange(0, len(image))
-    vline = pg.LineSegmentROI([[1, 0], [1, 10]], pen='r')  # vertical line
+    vline = pg.InfiniteLine(angle=90, movable=True)  # vertical line
+    vline.setBounds([0, image.shape[0]])
     p2.addItem(vline)
-    canvas = pg.ImageItem()
+    canvas_image = pg.ImageItem()
+    canvas_label = pg.ImageItem()
 
     def vline_update():
-        z = int(vline.pos()[0])
+        z_max = labels.shape[0]
+        z = int(vline.getXPos())
         z = (z > 0) * z
-        z = (z < len(labels)) * z + (z >= len(labels) * len(labels) - 1)
-        refresh_image(canvas, image, z)
-        refresh_labels(p1, labels, z, canvas, image)
+        z = (z < z_max) * z + ((z >= z_max) * (z_max - 1))
+        refresh_image(canvas_image, image, z)
+        refresh_labels(p1, canvas_label, labels, z)
 
-    refresh_image(canvas, image, 1)
-    refresh_labels(p1, labels, 1, canvas, image)
-    vline.sigRegionChanged.connect(vline_update)
-    p1.addItem(canvas)
-    canvas.setZValue(-100)
-    window.resize(800, 800)
+    refresh_image(canvas_image, image, 1)
+    refresh_labels(p1, canvas_label, labels, 1)
+    vline.sigPositionChanged.connect(vline_update)
+    vline.sigPositionChangeFinished.connect(lambda: p1.replot())
+    p1.addItem(canvas_image)
+    p1.addItem(canvas_label)
+    window.resize(640, 640)
     window.show()
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
+
+
+def label_to_2d_image(labels, z='sum', alpha=0.5):
+    """
+    :param labels: (x, y, z), values are label values
+    :return: (x, y, rgba)
+    """
+    if z == 'sum':
+        labels_2d = labels.max(-1)
+    else:
+        labels_2d = labels[z, :, :]
+    rgba = cm.tab10(labels_2d)
+    rgba[:, :, -1] = alpha
+    rgba[np.where(labels_2d == 0)] = np.zeros(4)
+    return rgba
+
+
+def label_to_rgba(labels, alpha=None):
+    rgba = cm.tab10(labels)
+    if alpha:
+        rgba[:, :, :, -1] = alpha
+    rgba = rgba[np.where(labels > 0)]
+    return rgba
 
 
 def label_scatter(positions, labels):
