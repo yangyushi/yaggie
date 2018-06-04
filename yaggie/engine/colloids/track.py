@@ -24,9 +24,9 @@ from scipy.ndimage.morphology import grey_erosion, grey_dilation, binary_dilatio
 from scipy.ndimage import measurements
 from scipy.sparse.linalg import splu, spsolve
 from scipy import sparse
-if (sys.version_info <= (3, 0)):
-    from scipy import weave
-    from scipy.weave import converters
+#if (sys.version_info <= (3, 0)):
+#    from scipy import weave
+#    from scipy.weave import converters
 import numexpr
 #import PIL.Image
 import unittest

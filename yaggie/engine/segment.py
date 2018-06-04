@@ -17,6 +17,7 @@ class LabelEngine():
         labels, num = ndimage.label(labels)
         return labels
 
+
 class RandomWalkEngine():
     def __init__(self, threshold):
         self.threshold = threshold
@@ -47,6 +48,7 @@ class RandomWalkEngine():
         labels = random_walker(image, seed, **self.parameters)
         labels[np.where(labels==-1)] = 0
         return labels
+
 
 class KMeansEngine():
     def __init__(self, threshold):
@@ -86,3 +88,27 @@ class KMeansEngine():
             xyz = tuple(xyz_value.T[:3])
             labels[xyz] = value 
         return labels
+
+
+class CHEFEngine():
+    def __init__(self, blur=2):
+        self.blur = blur
+
+    def run(self, image):
+        blurred_img = ndimage.filters.gaussian_filter(image, self.blur)
+        dim = len(image.shape)  # dimension
+        xlim, ylim, zlim = image.shape
+        hassian = np.zeros((dim, dim, xlim, ylim, zlim))  # 2x2 or 3x3
+        for i in range(dim):
+            for j in range(dim):
+                hassian[i, j, :, :, :] = np.gradient(np.gradient(blurred_img, axis=i), axis=j)
+        p = np.zeros(image.shape)
+        for x in range(xlim):
+            for y in range(ylim):
+                for z in range(zlim):
+                    p[x, y, z] = self.is_neg_def(hassian[:, :, x, y, z])
+        return p
+
+    @staticmethod
+    def is_neg_def(x):
+        return np.all(np.linalg.eigvals(x) < 0)

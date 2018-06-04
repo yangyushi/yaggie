@@ -80,7 +80,7 @@ def render_labels(labels, metadata, alpha=0.01):
                                     label_positions.T[1].flatten().max() / 2,
                                     label_positions.T[2].flatten().max() / 2)  # rotation centre of the camera
     view.opts['distance'] = label_positions.flatten().max() * 2  # distance of the camera respect to the center
-    label_color = np.array(list(get_label_color(labels, alpha)))
+    label_color = np.array(label_to_rgba(labels, alpha))
     point_label = gl.GLScatterPlotItem(pos=label_positions, color=label_color, pxMode=False)
     view.addItem(point_label)
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
