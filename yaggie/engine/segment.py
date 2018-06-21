@@ -3,6 +3,7 @@ from scipy import ndimage
 from skimage import morphology
 from sklearn.cluster import KMeans
 from skimage.segmentation import random_walker
+from numba import jit
 
 class LabelEngine():
     def __init__(self, minimum_voxel_number):
@@ -94,21 +95,29 @@ class CHEFEngine():
     def __init__(self, blur=2):
         self.blur = blur
 
+    @jit
     def run(self, image):
-        blurred_img = ndimage.filters.gaussian_filter(image, self.blur)
-        dim = len(image.shape)  # dimension
-        xlim, ylim, zlim = image.shape
-        hassian = np.zeros((dim, dim, xlim, ylim, zlim))  # 2x2 or 3x3
-        for i in range(dim):
-            for j in range(dim):
-                hassian[i, j, :, :, :] = np.gradient(np.gradient(blurred_img, axis=i), axis=j)
-        p = np.zeros(image.shape)
-        for x in range(xlim):
-            for y in range(ylim):
-                for z in range(zlim):
-                    p[x, y, z] = self.is_neg_def(hassian[:, :, x, y, z])
-        return p
-
-    @staticmethod
-    def is_neg_def(x):
-        return np.all(np.linalg.eigvals(x) < 0)
+        # blur the image
+        g_image = ndimage.filters.gaussian_filter(image, self.blur)
+        # generate Hassian Matrix (3, 3, x, y, z)
+        h = []
+        for i in range(3):
+            h.append([])
+            for j in range(3):
+                h[i].append(np.gradient(np.gradient(g_image, axis=i), axis=j))
+        h = np.array(h)
+        p = np.zeros(h.shape[2:])
+        for x in range(h.shape[2]):
+            for y in range(h.shape[3]):
+                for z in range(h.shape[4]):
+                    # p = 1 if h[:, :, x, y, z] is negative definite, else 0
+                    d11 = h[0, 0, x, y, z]
+                    d22 = np.linalg.det(h[0:2, 0:2, x, y, z])
+                    d33 = np.linalg.det(h[0:3, 0:3, x, y, z])
+                    if (-1 * d11 > 0) and (d22 > 0) and (-1 * d33 > 0):
+                        p[x, y, z] = 1
+                    else:
+                        p[x, y, z] = 0
+        le = LabelEngine(0)
+        seeds = le.run(np.array(p))
+        return seeds

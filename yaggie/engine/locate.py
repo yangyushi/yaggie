@@ -60,12 +60,37 @@ class TrackpyEngine():
 class ColloidsEngine():
     def __init__(self, k):
         self.k = k
-        self.parameters = {'Octave0': False, 'nbOctaves': 4}
+        self.dog_parameters = {
+            'nbLayers': 5,
+            'nbOctaves': 3,
+            'Octave0': True,
+        }
+        self.parameters = {
+            'removeOverlap': True,
+            'maxedge': 1,
+            'deconvKernel': None,
+            'first_layer': False,
+            'maxDoG': None
+        }
+        self.maxima = None
+        self.sizes = None
 
     def run(self, data):
         data = np.moveaxis(data, -1, 0)
         data = np.moveaxis(data, -1, 1)
-        finder = colloids.MultiscaleBlobFinder(data.shape, **self.parameters)
-        centers = finder(data)
-        maxima = centers.T[:3].T
-        return maxima
+        finder = colloids.MultiscaleBlobFinder(data.shape, **self.dog_parameters)
+        centers = finder(data, k=self.k, **self.parameters)
+        self.maxima = centers.T[:3].T
+        self.sizes = centers.T[-2].T
+        return self.maxima
+
+    def get_deconv_kernel(self, data):
+        self.kernel = colloids.track.get_deconv_kernel(data, k=self.k)
+        self.parameters['deconvKernel'] = self.kernel
+        return self.kernel
+
+    def deconvolve(self, data):
+        if self.k:
+            return colloids.track.deconvolve(data, self.kernel)
+        else:
+            return None
