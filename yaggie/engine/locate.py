@@ -32,7 +32,7 @@ class TrackpyEngine():
         radius = np.array(radius)
         self.diameters = 2 * radius + 1  # ensure it is an odd number
         self.parameters = {  # the default parameters in trackpy
-                'minmass': None,
+                'minmass': 0,
                 'maxsize': None,
                 'separation': None,
                 'noise_size': 1,
@@ -49,8 +49,6 @@ class TrackpyEngine():
                 }
 
     def run(self, data):
-        data = np.moveaxis(data, -1, 0)
-        data = np.moveaxis(data, -1, 1)
         maxima = trackpy.feature.locate(data, self.diameters, **self.parameters)
         maxima = np.array(maxima)
         maxima = maxima.T[:3].T
