@@ -7,3 +7,5 @@ engine/mytrack/__pycache__/*
 .*
 !.gitignore
 reinstall.sh
+venv
+*.lif

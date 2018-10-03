@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 import pickle
 
@@ -84,3 +85,18 @@ def refine_maxima(maxima, image, radius=4, iteration=10):
             result.append(maximum + delta)
         maxima = np.array(result)
     return np.array(result)
+
+
+def label_to_2d_image(labels, alpha=0.5, cmap=None):
+    """
+    :param labels: (x, y, z), values are label values
+    :return: (x, y, rgba)
+    """
+    labels_2d = labels.max(-1).T
+    if cmap:
+        rgba = cmap((labels_2d % 10 + 1) * (labels_2d > 0))
+    else:
+        rgba = cm.tab10((labels_2d % 10 + 1) * (labels_2d > 0))
+    rgba[:, :, -1] = alpha
+    rgba[np.where(labels_2d == 0)] = np.zeros(4)
+    return rgba
