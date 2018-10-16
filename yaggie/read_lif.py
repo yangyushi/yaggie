@@ -1,4 +1,5 @@
-#
+# The code was origionally done by Mathieu Leocmach, and modified by Yushi Yang (yushi.yang@bristol.ac.uk)
+
 #    Copyright 2009 Mathieu Leocmach
 #
 #    This file is part of Colloids.
@@ -15,7 +16,8 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with Colloids.  If not, see <http://www.gnu.org/licenses/>.
-#
+
+
 import struct, io, re, os.path, subprocess, shlex, sys
 from bs4 import BeautifulSoup
 import xml
@@ -363,9 +365,9 @@ class SerieHeader:
             self.__nbPixelsPerSlice = np.prod(self.get2DShape())
         return self.__nbPixelsPerSlice
 
-def extract_XML(name):
+def get_xml(lif_name):
     """Extract the XML header from LIF file and save it"""
-    with open(name,"rb") as f:
+    with open(lif_name,"rb") as f:
         memBlock, trash, testBlock = struct.unpack("iic", f.read(9))
         if memBlock != 112:
             raise Exception("This is not a valid LIF file")
@@ -373,11 +375,8 @@ def extract_XML(name):
             raise Exception ("Invalid block at %l" % f.tell())
         memorysize, = struct.unpack("I", f.read(4))
         #read and parse the header
-        soup = BeautifulSoup(f.read(2*memorysize).decode("utf-16"), "xml")
-        #open the output file
-        with open(name[:-3]+'xml', 'wb') as out:
-            #write the header in a human-reable way
-            out.write(soup.prettify('utf-8'))
+        xml = f.read(2*memorysize).decode("utf-16")
+        return xml
 
 class Reader(Header):
     """Reads Leica LIF files"""
@@ -526,12 +525,13 @@ class Serie(SerieHeader):
             ,self.get2DString(**dimensionsIncrements)
         )
 
-    def getFrame(self, channel=0, T=0):
+    def getFrame(self, channel=0, T=0, dtype=np.uint8):
         """
         Return a numpy array (C order, thus last index is X):
          2D if XYT or XZT serie,
          3D if XYZ, XYZT or XZYT
          (ok if no T dependence)
+        Leica use uint8 by default, but after deconvolution the datatype is np.uint16
         """
         zcyx = []
         channels = self.getChannels()
@@ -539,7 +539,7 @@ class Serie(SerieHeader):
             cyx = []
             for i in range(len(channels)):
                 self.f.seek(self.getOffset(**dict({'T':T, 'Z':z})) + self.getChannelOffset(i))
-                yx = np.fromfile(self.f, dtype=np.ubyte, count=self.getNbPixelsPerSlice())
+                yx = np.fromfile(self.f, dtype=dtype, count=self.getNbPixelsPerSlice())
                 yx = yx.reshape(self.get2DShape())
                 cyx.append(yx)
             zcyx.append(cyx)
