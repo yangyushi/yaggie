@@ -5,6 +5,7 @@ from sklearn.cluster import KMeans
 from skimage.segmentation import random_walker
 from numba import jit
 
+
 class LabelEngine():
     def __init__(self, minimum_voxel_number):
         self.mvb = minimum_voxel_number
@@ -97,6 +98,10 @@ class CHEFEngine():
 
     @jit
     def run(self, image):
+        if not isinstance(image, np.ndarray):
+            image = np.array(image, dtype=np.float64)
+        if image.dtype != np.float64:
+            image = image.astype(np.float64)
         # blur the image
         g_image = ndimage.filters.gaussian_filter(image, self.blur)
         # generate Hassian Matrix (3, 3, x, y, z)
