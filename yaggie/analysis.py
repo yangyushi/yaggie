@@ -4,9 +4,10 @@ import numpy as np
 from scipy import ndimage
 from scipy.spatial import ConvexHull
 
+
 class LabelAnalyser():
     """
-    labels --> 3d array 
+    labels --> 3d array
         shape: (size_x, size_y, size_z)
         value: label value (int)
     """
@@ -14,7 +15,7 @@ class LabelAnalyser():
         self.labels = labels
         self.refined_labels = np.zeros(labels.shape)
         self.metadata = metadata
-        if type(self.metadata) == type(None):
+        if isinstance(self.metadata, type(None)):
             warnings.warn('Analysing without metadata')
         self.max_value = np.max(self.labels)
         self.voxel_numbers = [len(np.where(self.labels == i+1)[0]) for i in range(self.max_value)]
@@ -44,14 +45,14 @@ class LabelAnalyser():
 
     def get_ch(self, label):
         scatters = np.array(label.nonzero())
-        if type(self.metadata) != type(None):
+        if isinstance(self.metadata, type(None)):
             scatters = scatters * np.array([[self.metadata['pixel_size_x'],
                                              self.metadata['pixel_size_y'],
                                              self.metadata['pixel_size_z']]]).T
         return ConvexHull(scatters.T)
 
     def get_volume(self, label):
-        if type(self.metadata) != type(None):
+        if isinstance(self.metadata, type(None)):
             voxel_volume = self.metadata['pixel_size_x'] *\
                            self.metadata['pixel_size_y'] *\
                            self.metadata['pixel_size_z']
@@ -67,6 +68,7 @@ class LabelAnalyser():
         scatters = np.array(label.nonzero()).T
         return np.average(scatters, axis=0)
 
+
 class ZebrabowAnalyser(LabelAnalyser):
     def __init__(self, labels, metadata=None):
         super().__init__(labels, metadata)
@@ -79,6 +81,7 @@ class ZebrabowAnalyser(LabelAnalyser):
             return (merged - single).flatten().sum() / label.flatten().sum()
         else:
             return False
+
 
 class TrajectoryAnalyser():
     def __init__(self, time, positions):
@@ -98,12 +101,12 @@ class TrajectoryAnalyser():
     def iter_trajectories(self):
         for pos in self.positions:
             yield pos
-        
+
     def get_speed(self):
         distance = self.positions[:, 1:, :] - self.positions[:, :-1, :]
         time_interval = self.time[1:] - self.time[:-1]
         # [t1, t2, ...] --> [[t1, t1, t1], [t2, t2, t2], ...]
-        speed = distance / time_interval_xyz
+        speed = distance / time_interval
         return speed
 
     def get_pure_trajectories(self):
@@ -121,7 +124,6 @@ class TrajectoryAnalyser():
         for positions in self.positions:
             msd += self.get_msd(positions, start, stop)
         return msd
-
 
     def get_ensemble_acf(self, start=0, stop=None):
         """
@@ -157,7 +159,7 @@ class TrajectoryAnalyser():
             movements = positions[1:] - positions[:-1]
             for i, move in enumerate(movements):
                 a0, e0, r0 = self.cart2sph(move)
-                #a0 += np.pi * (a0 < 0)
+                # a0 += np.pi * (a0 < 0)
                 a0 = abs(a0)
                 if (r0 >= threshold):
                     angles.append(r2d(a0))
@@ -174,7 +176,7 @@ class TrajectoryAnalyser():
             movements = positions[1:] - positions[:-1]
             for i, move in enumerate(movements):
                 a0, e0, r0 = self.cart2sph(move)
-                #e0 += np.pi/2 * (e0 < 0)
+                # e0 += np.pi/2 * (e0 < 0)
                 e0 = abs(e0)
                 if (r0 >= threshold):
                     angles.append(r2d(e0))
@@ -192,7 +194,7 @@ class TrajectoryAnalyser():
             delta_move = movements[1:] - movements[:-1]
             for i, move in enumerate(delta_move):
                 a0, e0, r0 = self.cart2sph(move)
-                #e0 += np.pi/2 * (e0 < 0)
+                # e0 += np.pi/2 * (e0 < 0)
                 e0 = abs(e0)
                 if (r0 >= threshold):
                     angles.append(r2d(e0))
@@ -210,7 +212,7 @@ class TrajectoryAnalyser():
             delta_move = movements[1:] - movements[:-1]
             for i, move in enumerate(delta_move):
                 a0, e0, r0 = self.cart2sph(move)
-                #a0 += np.pi * (a0 < 0)
+                # a0 += np.pi * (a0 < 0)
                 a0 = abs(a0)
                 if (r0 >= threshold):
                     angles.append(r2d(a0))

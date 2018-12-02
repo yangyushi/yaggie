@@ -5,35 +5,40 @@ from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 import pickle
 
+
 def plot_trajectories(trajectories, projection=True):
-    color_list = ['r', 'g', 'b', 'c', 'm', 'y']
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    #ax._axis3don = False
     for i, traj in enumerate(trajectories):
-        x, y, z = traj[1:].T
-        u, v, w = traj[:-1].T - traj[1:].T
-        ax.plot(*traj.T, color='c', alpha=0.5)
+        rc = np.random.random(3)
+        pos = np.array(traj['position']).T
+        x, y, z = pos[:, :-1]
+        u, v, w = pos[:, 1:] - pos[:, :-1]
+        ax.plot(*pos, color=rc, alpha=0.5)
         ax.quiver(x, y, z, u, v, w, arrow_length_ratio=0.3, length=2, normalize=True)
-        ax.scatter(*traj.T, marker='o', color=color_list[i % 6])
+        ax.scatter(*pos, marker='o', color=rc)
         if projection:
-            ax.plot(*traj.T[:2], zs=0, zdir='z', color=color_list[i % 6], alpha=0.5)
-            ax.plot(xs=np.zeros(traj.T[0].shape), ys=traj.T[1], zs=traj.T[2], zdir='z', color=color_list[i % 6], alpha=0.5)
-            ax.plot(xs=traj.T[0], ys=np.zeros(traj.T[1].shape), zs=traj.T[2], zdir='z', color=color_list[i % 6], alpha=0.5)
-    plt.show() 
+            ax.plot(*pos[:2], zs=0, zdir='z', color=rc, alpha=0.5)
+            ax.plot(xs=np.zeros(pos[0].shape), ys=pos[1], zs=pos[2], zdir='z', color=rc, alpha=0.5)
+            ax.plot(xs=pos[0], ys=np.zeros(pos[1].shape), zs=pos[2], zdir='z', color=rc, alpha=0.5)
+    plt.show()
+
 
 def plot_trajectory(trajectory, projection=True):
+    pos = np.array(trajectory['position']).T
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    x, y, z = trajectory[1:].T
-    u, v, w = trajectory[:-1].T - trajectory[1:].T
+    x, y, z = pos[:, :-1]
+    u, v, w = pos[:, 1:] - pos[:, :-1]
+    ax.plot(*pos, alpha=0.5)
     ax.quiver(x, y, z, u, v, w, arrow_length_ratio=0.3, length=2, normalize=True)
-    ax.scatter(*trajectory.T, marker='o')
+    ax.scatter(*pos, marker='o')
     if projection:
-        ax.plot(*trajectory.T[:2], zs=0, zdir='z', alpha=0.5)
-        ax.plot(xs=np.zeros(trajectory.T[0].shape), ys=trajectory.T[1], zs=trajectory.T[2], zdir='z', alpha=0.5)
-        ax.plot(xs=trajectory.T[0], ys=np.zeros(trajectory.T[1].shape), zs=trajectory.T[2], zdir='z', alpha=0.5)
+        ax.plot(*pos[:2], zs=0, zdir='z', alpha=0.5)
+        ax.plot(xs=np.zeros(pos[0].shape), ys=pos[1], zs=pos[2], zdir='z', alpha=0.5)
+        ax.plot(xs=pos[0], ys=np.zeros(pos[1].shape), zs=pos[2], zdir='z', alpha=0.5)
     plt.show()
+
 
 def load_large_pkl(fn):
     max_bytes = 2**31 - 1
@@ -42,7 +47,8 @@ def load_large_pkl(fn):
     with open(fn, 'rb') as f:
         for _ in range(0, input_size, max_bytes):
             bytes_in += f.read(max_bytes)
-    return bytes_in 
+    return bytes_in
+
 
 def read_pkl(fn):
     try:
@@ -55,11 +61,13 @@ def read_pkl(fn):
         array = pickle.loads(bytes_in)
         return array
 
+
 def file_iter(folder, keywords):
     for name in os.listdir(folder):
         if '.' in name:  # execlude folder names
             if np.all([c in name for c in keywords]):
                 yield name
+
 
 def refine_maxima(maxima, image, radius=4, iteration=10):
     """
