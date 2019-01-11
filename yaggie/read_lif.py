@@ -34,7 +34,8 @@ dimName = {1: "X",
             5: "Lambda",
             6: "Rotation",
             7: "XT Slices",
-            8: "TSlices",}
+            8: "TSlices",
+            10:"unknown"}
 channelTag = ["Gray","Red","Green","Blue"]
 
 class Header:
