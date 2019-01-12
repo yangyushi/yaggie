@@ -1,9 +1,6 @@
 build/*
 PKG-INFO
-engine/__pycache__/*
-engine/colloids/__pycache__/*
-engine/linking/__pycache__/*
-engine/mytrack/__pycache__/*
+**/__pycache__/**
 .*
 !.gitignore
 reinstall.sh
