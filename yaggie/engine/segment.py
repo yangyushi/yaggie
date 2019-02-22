@@ -4,6 +4,36 @@ from skimage import morphology
 from sklearn.cluster import KMeans
 from skimage.segmentation import random_walker
 from numba import jit
+from scipy.spatial import ConvexHull
+from itertools import product
+
+
+def join_pairs(pairs):
+    if len(pairs) == 0:
+        return []
+    max_val = np.max(np.hstack(pairs)) + 1
+    canvas = np.zeros((max_val, max_val), dtype=int)
+    p = np.array(pairs)
+    canvas[tuple(p.T)] = 1
+    labels, _ = ndimage.label(canvas)
+    joined_pairs = []
+    for val in set(labels[labels > 0]):
+        joined_pair = np.unique(np.vstack(np.where(labels == val)))
+        joined_pairs.append(joined_pair)
+    return joined_pairs
+
+
+def is_touching(label_1, label_2):
+    box_1 = ndimage.find_objects(label_1 > 0)[0]
+    box_2 = ndimage.find_objects(label_2 > 0)[0]
+    is_touch = True
+    for dim in range(label_1.ndim):
+        a1 = box_1[dim].start
+        a2 = box_1[dim].stop
+        b1 = box_2[dim].start
+        b2 = box_2[dim].stop
+        is_touch *= (((b2 > a1) and (b1 < a2)) or ((b1 < a2) and (b2 > a1)))
+    return is_touch
 
 
 class LabelEngine():
@@ -48,7 +78,7 @@ class RandomWalkEngine():
             blank_region = np.where(image < self.threshold)
         seed[blank_region] = -1
         labels = random_walker(image, seed, **self.parameters)
-        labels[np.where(labels==-1)] = 0
+        labels[np.where(labels == -1)] = 0
         return labels
 
 
@@ -62,7 +92,7 @@ class KMeansEngine():
         com = lambda xyz: np.mean(xyz, axis=1)  # center of mass
         for value in range(int(seed.rabel().max())):
             label = np.zeros(seed.shape)
-            label[np.where(seed==value + 1)] = 1
+            label[np.where(seed == value + 1)] = 1
             maxima.append(com(xyz(label)))
         return np.array(maxima)
 
@@ -86,15 +116,99 @@ class KMeansEngine():
         label_values = np.expand_dims(label_values, axis=-1)
         xyz_values = np.concatenate((scatters, label_values), axis=1)
         for value in range(label_values.max() + 1):
-            xyz_value = np.array(list(filter(lambda x: x[-1]==value, xyz_values)))
+            xyz_value = np.array(list(filter(lambda x: x[-1] == value, xyz_values)))
             xyz = tuple(xyz_value.T[:3])
-            labels[xyz] = value 
+            labels[xyz] = value
         return labels
 
 
 class CHEFEngine():
-    def __init__(self, blur=2):
+    def __init__(self, blur=2, number_threshold=2, N=0):
         self.blur = blur
+        self.number_threshold = number_threshold
+        self.N = N
+        if N > 0:
+            self.unit_vectors = self.get_unit_vectors()
+
+    def get_unit_vectors(self):
+        # a semi-sphere
+        azimuths = np.arange(0, 4 * self.N, 1, dtype=float) / (2 * self.N) * np.pi
+        elevations = np.arange(0, self.N, 1, dtype=float) / (2 * self.N) * np.pi
+        azimuths = np.expand_dims(azimuths, 0)
+        elevations = np.expand_dims(elevations, 1)
+        unit_vectors = np.array([
+            np.cos(azimuths) * np.sin(elevations),
+            np.sin(azimuths) * np.sin(elevations),
+            np.ones(azimuths.shape) * np.cos(elevations)
+        ])
+        return unit_vectors.reshape(3, np.max(azimuths.shape) * np.max(elevations.shape)).T
+
+    def get_ch(self, label):
+        """
+        get the P(V, N) the origional paper
+        according to 10.1109/ICPR.2002.1048295
+        """
+        in_label = np.array(np.where(label > 0)).T  # (number, dimension)
+        in_cube = []
+        for dim in range(label.ndim):
+            coord_range = range(in_label[:, dim].min(), in_label[:, dim].max() + 1)
+            in_cube.append(list(coord_range))
+        in_cube = list(product(*in_cube))
+        in_cube = np.array(in_cube)  # (number, dimension)
+        in_convex_hull = []
+
+        f_min_values, f_max_values = [], []
+
+        for nv in self.unit_vectors:
+            products = [nv.dot(p) for p in in_label]
+            f_min = np.min(products)
+            f_max = np.max(products)
+            f_min_values.append(f_min)
+            f_max_values.append(f_max)
+
+        for c in in_cube:
+            is_in_ch = True
+            for i, nv in enumerate(self.unit_vectors):
+                p = nv.dot(c)
+                is_in_ch *= (p >= f_min_values[i])
+                is_in_ch *= (p <= f_max_values[i])
+            if is_in_ch:
+                in_convex_hull.append(c)
+        in_convex_hull = np.array(in_convex_hull).astype(int)
+        return in_convex_hull
+
+    def should_merge(self, label_1, label_2):
+        in_ch_1 = self.get_ch(label_1)
+        in_ch_2 = self.get_ch(label_2)
+        for coord_1 in in_ch_1:
+            for coord_2 in in_ch_2:
+                if np.isclose(coord_1, coord_2).all():
+                    return True
+        return False
+
+    def combine_labels(self, labels):
+        values = np.unique(labels)
+        values = values[values > 0]
+        to_merge = []
+        for i, v1 in enumerate(values[: -1]):
+            for v2 in values[i + 1:]:
+                label_1 = labels.copy()
+                label_2 = labels.copy()
+                label_1[labels != v1] = 0
+                label_2[labels != v2] = 0
+                if is_touching(label_1, label_2):
+                    print(v1, v2, np.sum(label_1), np.sum(label_2), end='')
+                    print('... is touching!', end='')
+                    if self.should_merge(label_1, label_2):
+                        to_merge.append((v1, v2))
+                        print('... and should merge!')
+                    else:
+                        print('')
+        merged_pairs = join_pairs(to_merge)
+        for merged in merged_pairs:
+            for value in merged:
+                labels[labels == value] = merged[0]  # assign the same value for labels
+        return labels
 
     @jit
     def run(self, image):
@@ -123,6 +237,8 @@ class CHEFEngine():
                         p[x, y, z] = 1
                     else:
                         p[x, y, z] = 0
-        le = LabelEngine(0)
-        seeds = le.run(np.array(p))
-        return seeds
+        le = LabelEngine(self.number_threshold)
+        labels = le.run(np.array(p))
+        if self.N > 0:
+            labels = self.combine_labels(labels)
+        return labels
