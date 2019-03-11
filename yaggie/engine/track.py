@@ -3,12 +3,13 @@ import trackpy as tp
 
 
 class TrackpyEngine():
-    def __init__(self, max_movement, memory=0):
+    def __init__(self, max_movement, memory=0, max_subnet_size=30):
         """
         unit of the movement is pixel
         """
         self.max_movement = max_movement
         self.memory = memory
+        self.max_subnet_size = max_subnet_size
 
     @staticmethod
     def _check_input(positions, time_points, labels):
@@ -68,5 +69,6 @@ class TrackpyEngine():
         labels: [(frame_index, [labels, ... ]), ...]
         """
         pos, time, labels = self._check_input(positions, time_points, labels)
+        tp.linking.Linker.MAX_SUB_NET_SIZE = self.max_subnet_size
         link_result = tp.link_iter(pos, search_range=self.max_movement, memory=self.memory)
         return self.__get_trajectories(list(link_result), pos, time, labels)
