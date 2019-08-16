@@ -6,3 +6,4 @@ PKG-INFO
 reinstall.sh
 venv
 *.lif
+**tags
