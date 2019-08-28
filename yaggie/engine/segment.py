@@ -3,7 +3,7 @@ from scipy import ndimage
 from skimage import morphology
 from sklearn.cluster import KMeans
 from skimage.segmentation import random_walker
-from numba import jit
+from numba import njit
 from scipy.spatial import ConvexHull
 from itertools import product
 
@@ -23,17 +23,16 @@ def join_pairs(pairs):
     return joined_pairs
 
 
-def is_touching(label_1, label_2):
-    box_1 = ndimage.find_objects(label_1 > 0)[0]
-    box_2 = ndimage.find_objects(label_2 > 0)[0]
-    is_touch = True
-    for dim in range(label_1.ndim):
-        a1 = box_1[dim].start
-        a2 = box_1[dim].stop
-        b1 = box_2[dim].start
-        b2 = box_2[dim].stop
-        is_touch *= (((b2 > a1) and (b1 < a2)) or ((b1 < a2) and (b2 > a1)))
-    return is_touch
+@njit
+def is_touching(v1, v2, img):
+    indices_1 = np.where(img == v1)
+    indices_2 = np.where(img == v2)
+    for d in range(img.ndim):
+        box_1 = indices_1[d]
+        box_2 = indices_2[d]
+        if (box_1.min() > box_2.max()) or (box_1.max() < box_2.min()):
+            return False
+    return True
 
 
 class LabelEngine():
@@ -192,11 +191,11 @@ class CHEFEngine():
         to_merge = []
         for i, v1 in enumerate(values[: -1]):
             for v2 in values[i + 1:]:
-                label_1 = labels.copy()
-                label_2 = labels.copy()
-                label_1[labels != v1] = 0
-                label_2[labels != v2] = 0
-                if is_touching(label_1, label_2):
+                if is_touching(v1, v2, labels):
+                    label_1 = labels.copy()
+                    label_2 = labels.copy()
+                    label_1[labels != v1] = 0
+                    label_2[labels != v2] = 0
                     print(v1, v2, np.sum(label_1), np.sum(label_2), end='')
                     print('... is touching!', end='')
                     if self.should_merge(label_1, label_2):
@@ -210,35 +209,43 @@ class CHEFEngine():
                 labels[labels == value] = merged[0]  # assign the same value for labels
         return labels
 
-    @jit
     def run(self, image):
-        if not isinstance(image, np.ndarray):
-            image = np.array(image, dtype=np.float64)
+        image = np.array(image, dtype=np.float64)
         if image.dtype != np.float64:
             image = image.astype(np.float64)
         # blur the image
         g_image = ndimage.filters.gaussian_filter(image, self.blur)
+        hessian = get_h(g_image)
         # generate Hassian Matrix (3, 3, x, y, z)
-        h = []
-        for i in range(3):
-            h.append([])
-            for j in range(3):
-                h[i].append(np.gradient(np.gradient(g_image, axis=i), axis=j))
-        h = np.array(h)
-        p = np.zeros(h.shape[2:])
-        for x in range(h.shape[2]):
-            for y in range(h.shape[3]):
-                for z in range(h.shape[4]):
-                    # p = 1 if h[:, :, x, y, z] is negative definite, else 0
-                    d11 = h[0, 0, x, y, z]
-                    d22 = np.linalg.det(h[0:2, 0:2, x, y, z])
-                    d33 = np.linalg.det(h[0:3, 0:3, x, y, z])
-                    if (-1 * d11 > 0) and (d22 > 0) and (-1 * d33 > 0):
-                        p[x, y, z] = 1
-                    else:
-                        p[x, y, z] = 0
+        p = get_p(hessian)
         le = LabelEngine(self.number_threshold)
-        labels = le.run(np.array(p))
+        labels = le.run(p)
         if self.N > 0:
             labels = self.combine_labels(labels)
         return labels
+
+
+def get_h(image):
+    h = []
+    for i in range(3):
+        h.append([])
+        for j in range(3):
+            h[i].append(np.gradient(np.gradient(image, axis=i), axis=j))
+    h = np.array(h)
+    return h
+
+@njit
+def get_p(h):
+    p = np.zeros(h.shape[2:])
+    for x in range(h.shape[2]):
+        for y in range(h.shape[3]):
+            for z in range(h.shape[4]):
+                # p = 1 if h[:, :, x, y, z] is negative definite, else 0
+                d11 = h[0, 0, x, y, z]
+                d22 = np.linalg.det(h[0:2, 0:2, x, y, z])
+                d33 = np.linalg.det(h[0:3, 0:3, x, y, z])
+                if (-1 * d11 > 0) and (d22 > 0) and (-1 * d33 > 0):
+                    p[x, y, z] = 1
+                else:
+                    p[x, y, z] = 0
+    return p
